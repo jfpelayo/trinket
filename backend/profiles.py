@@ -28,11 +28,31 @@ def current_user_id(client):
     return str(response.user.id)
 
 
-def save_profile(client, display_name):
+def save_profile(client, display_name, **preferences):
     name = display_name.strip()
 
     if not name:
         raise ValueError("Display name cannot be empty.")
+
+    allowed = {
+        "timezone",
+        "avatar_url",
+        "pronouns",
+        "communication_style",
+        "motivation_style",
+        "preferred_study_time",
+        "focus_session_minutes",
+        "reminders_enabled",
+    }
+
+    unknown = set(preferences) - allowed
+    if unknown:
+        raise ValueError(f"Unknown profile fields: {sorted(unknown)}")
+
+    if preferences.get("timezone") is not None:
+        from zoneinfo import ZoneInfo
+
+        ZoneInfo(preferences["timezone"])
 
     response = (
         client.table("profiles")
@@ -40,6 +60,7 @@ def save_profile(client, display_name):
             {
                 "id": current_user_id(client),
                 "display_name": name,
+                **preferences,
             },
             on_conflict="id",
         )
@@ -48,11 +69,10 @@ def save_profile(client, display_name):
 
     return response.data
 
-
 def get_profile(client):
     response = (
         client.table("profiles")
-        .select("id, display_name, created_at")
+        .select("*")
         .eq("id", current_user_id(client))
         .execute()
     )
