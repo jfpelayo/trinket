@@ -1,13 +1,21 @@
 import { View, StyleSheet } from 'react-native';
-import { Image } from 'expo-image';
+import { Image, ImageBackground } from 'expo-image';
+import Task from '@/components/task';
 
 const background = require('@/assets/images/onboarding-bg.svg');
 export default function Index() {
     return(
         <View style={styles.container}>
-            <View style={StyleSheet.imageContainer}>
-                <Image source={background} style={StyleSheet.image} />
+            <View style={styles.imageContainer}>
+                {/* <Image source={background} style={styles.image} /> */}
+                <Image source={background} style={styles.image}/>
             </View>
+            {/* <View id='tasksheet'> */}
+                <View style={styles.buttonContainer}>
+                    <Task label='sdfkjldskf' />
+                </View>
+            {/* </View> */}
+            
         </View>
     );
 }
@@ -22,8 +30,14 @@ const styles = StyleSheet.create({
         flex: 1
     },
     image: {
-        width: 320,
-        height: 440,
-        borderRadius: 18
+        width: 1080,
+        height: 1920,
+        borderRadius: 18,
+        resizeMode: 'center',
+        flex: 1
     },
+    buttonContainer: {
+        flex: 1 / 3,
+        alignItems: 'center',
+    }
 });
