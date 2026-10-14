@@ -8,6 +8,9 @@
       ],
       "@/assets/*": [
         "./assets/*"
+      ],
+      "react-native/types/*": [
+        "./node_modules/react-native/types/*"
       ]
     }
   },
@@ -17,8 +20,12 @@
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
   ],
-"paths": {
-  "@/*": ["./src/*"],
-  "@/assets/*": ["./assets/*"],
-  "react-native/types/*": ["./node_modules/react-native/types/*"]
-}}
+// "paths": {
+//   "@/*": ["./src/*"],
+//   "@/assets/*": ["./assets/*"],
+//   "react-native/types/*": ["./node_modules/react-native/types/*"]
+// },
+"exclude": [
+  "node_modules",
+  "example"
+]}

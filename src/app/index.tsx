@@ -12,7 +12,7 @@ export default function Index() {
             </View>
             {/* <View id='tasksheet'> */}
                 <View style={styles.buttonContainer}>
-                    <Task label='sdfkjldskf' />
+                    <Task label='Sample task' />
                 </View>
             {/* </View> */}
             
@@ -37,7 +37,8 @@ const styles = StyleSheet.create({
         flex: 1
     },
     buttonContainer: {
-        flex: 1 / 3,
+        // flex: 1 / 3,
         alignItems: 'center',
+        padding: 30
     }
 });
