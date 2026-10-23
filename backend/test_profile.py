@@ -18,7 +18,14 @@ def main():
 
     try:
         print("Before:", get_profile(client))
-        save_profile(client, "Hiro")
+        save_profile(
+    client,
+    "Hiro",
+    timezone="America/Los_Angeles",
+    preferred_study_time="14:30",
+    communication_style="concise",
+    focus_session_minutes=25,
+)
         print("After:", get_profile(client))
     finally:
         client.auth.sign_out()
