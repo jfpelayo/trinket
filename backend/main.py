@@ -1,13 +1,15 @@
 import io
+import os
 import fitz  # PyMuPDF
 import easyocr
 import httpx
 import pytz
-import firebase_admin
-from firebase_admin import credentials
+from pathlib import Path
+from urllib.parse import unquote, urlsplit
 from datetime import datetime, timedelta
 from typing import List, Optional
 from contextlib import asynccontextmanager
+from dotenv import load_dotenv
 
 
 from fastapi import FastAPI, UploadFile, File, Form, Header, HTTPException, BackgroundTasks
@@ -17,13 +19,41 @@ from pydantic import BaseModel
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.jobstores.redis import RedisJobStore
 from apscheduler.executors.pool import ThreadPoolExecutor
-cred = credentials.Certificate("backend/trinket-f2253-firebase-adminsdk-fbsvc-7aab4bfe79.json")
-firebase_admin.initialize_app(cred)
+
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
+DATABASE_URL = os.getenv("DATABASE_URL", "")
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "10"))
+
+
+def redis_job_store_from_url(redis_url: str) -> RedisJobStore:
+    parsed = urlsplit(redis_url)
+    if parsed.scheme not in {"redis", "rediss"} or not parsed.hostname:
+        raise ValueError("REDIS_URL must be a valid redis:// or rediss:// URL")
+
+    connect_args = {
+        "host": parsed.hostname,
+        "port": parsed.port or 6379,
+    }
+    if parsed.username:
+        connect_args["username"] = unquote(parsed.username)
+    if parsed.password:
+        connect_args["password"] = unquote(parsed.password)
+    if parsed.scheme == "rediss":
+        connect_args["ssl"] = True
+
+    db_path = parsed.path.strip("/")
+    db = int(db_path) if db_path else 0
+    return RedisJobStore(db=db, **connect_args)
 
 # --- Phase 2: Configure Redis-Backed Scheduler ---
-# Jobs persist in Redis on port 6379 across server restarts
 jobstores = {
-    'default': RedisJobStore(host='localhost', port=6379, db=0)
+    'default': redis_job_store_from_url(REDIS_URL)
 }
 executors = {
     'default': ThreadPoolExecutor(20)
@@ -101,9 +131,9 @@ async def parse_events_with_ollama(extracted_text: str, user_tz_str: str) -> Ext
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                "http://localhost:11434/api/generate",
+                f"{OLLAMA_URL}/api/generate",
                 json={
-                    "model": "qwen2.5:3b",
+                    "model": OLLAMA_MODEL,
                     "prompt": prompt,
                     "format": ExtractedData.model_json_schema(),
                     "stream": False
