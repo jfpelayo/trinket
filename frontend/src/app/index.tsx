@@ -2,6 +2,7 @@ import { PirataOne_400Regular, useFonts } from '@expo-google-fonts/pirata-one';
 import { Image, ImageBackground } from 'expo-image';
 import { useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
+import { router } from 'expo-router';
 
 export default function HomeScreen() {
 useFonts({ PirataOne_400Regular });
@@ -18,9 +19,10 @@ return (
           testID="login-button"
           accessibilityLabel="Log in"
           onPress={() => {
-            console.log('pressed');
+            console.log('log in pressed');
             setUsername('');
             setPassword('');
+            router.push('/maintabs/chat');
           }}
           style={{ padding: 20, borderRadius: 15, position: 'absolute', top: 660, alignSelf: 'center' , width: 292, height: 100}}>
           {({ pressed }) => (

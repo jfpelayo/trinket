@@ -4,6 +4,7 @@
  */
 
 import '@/global.css';
+export const f1 = 'PirataOne_400Regular';
 
 import { Platform } from 'react-native';
 
