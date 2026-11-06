@@ -1,16 +1,12 @@
 import io
 import os
 import fitz  # PyMuPDF
-import easyocr
 import httpx
 import pytz
-from pathlib import Path
 from urllib.parse import unquote, urlsplit
 from datetime import datetime, timedelta
 from typing import List, Optional
 from contextlib import asynccontextmanager
-from dotenv import load_dotenv
-
 
 from fastapi import FastAPI, UploadFile, File, Form, Header, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,7 +16,9 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.jobstores.redis import RedisJobStore
 from apscheduler.executors.pool import ThreadPoolExecutor
 
-load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+from . import config  # noqa: F401  (loads root + backend .env)
+from .chatbot import router as chatbot_router
+from .routers.profiles import router as profiles_router
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
@@ -88,8 +86,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Load EasyOCR
-reader = easyocr.Reader(['en'], gpu=False)
+app.include_router(chatbot_router)
+app.include_router(profiles_router)
+
+# EasyOCR reader is created lazily so importing this module (tests,
+# router wiring) does not trigger the model download.
+_ocr_reader = None
+
+def get_ocr_reader():
+    global _ocr_reader
+    if _ocr_reader is None:
+        import easyocr
+        _ocr_reader = easyocr.Reader(['en'], gpu=False)
+    return _ocr_reader
 
 # --- Data Schemas ---
 class EventItem(BaseModel):
@@ -111,10 +120,10 @@ def extract_raw_text(file_bytes: bytes, filename: str) -> str:
                 text += page_text + "\n"
             else:
                 pix = page.get_pixmap()
-                results = reader.readtext(pix.tobytes())
+                results = get_ocr_reader().readtext(pix.tobytes())
                 text += " ".join([res[1] for res in results]) + "\n"
     else:
-        results = reader.readtext(file_bytes)
+        results = get_ocr_reader().readtext(file_bytes)
         text = " ".join([res[1] for res in results])
     return text
 

@@ -1,20 +1,27 @@
+"""Supabase profile helpers shared by the HTTP router and manual scripts.
+
+Works both as an importable module (backend/ on sys.path) and when the
+manual scripts are run directly from the backend/ directory.
+"""
 
 import os
-from pathlib import Path
+from zoneinfo import ZoneInfo
 
-from dotenv import load_dotenv
 from supabase import create_client
+
+if __package__:
+    from . import config  # noqa: F401  (loads root + backend .env)
+else:  # manual scripts run from backend/ import this flat
+    import config  # noqa: F401
 
 
 def connect():
-    # Read the .env file next to this Python file.
-    load_dotenv(Path(__file__).parent / ".env")
-
+    """Client for the interactive scripts: session-based auth."""
     url = os.getenv("SUPABASE_URL")
     key = os.getenv("SUPABASE_KEY")
 
     if not url or not key:
-        raise ValueError("Set SUPABASE_URL and SUPABASE_KEY in backend/.env")
+        raise ValueError("Set SUPABASE_URL and SUPABASE_KEY in .env or backend/.env")
 
     return create_client(url, key)
 
@@ -28,7 +35,12 @@ def current_user_id(client):
     return str(response.user.id)
 
 
-def save_profile(client, display_name, **preferences):
+def save_profile(client, display_name, *, user_id=None, **preferences):
+    """Upsert a profile row.
+
+    user_id: verified user id supplied by the HTTP layer. When omitted,
+    falls back to the client's signed-in session (manual scripts).
+    """
     name = display_name.strip()
 
     if not name:
@@ -50,15 +62,15 @@ def save_profile(client, display_name, **preferences):
         raise ValueError(f"Unknown profile fields: {sorted(unknown)}")
 
     if preferences.get("timezone") is not None:
-        from zoneinfo import ZoneInfo
-
         ZoneInfo(preferences["timezone"])
+
+    verified_user_id = user_id if user_id is not None else current_user_id(client)
 
     response = (
         client.table("profiles")
         .upsert(
             {
-                "id": current_user_id(client),
+                "id": verified_user_id,
                 "display_name": name,
                 **preferences,
             },
@@ -69,11 +81,19 @@ def save_profile(client, display_name, **preferences):
 
     return response.data
 
-def get_profile(client):
+
+def get_profile(client, *, user_id=None):
+    """Select a profile row.
+
+    user_id: verified user id supplied by the HTTP layer. When omitted,
+    falls back to the client's signed-in session (manual scripts).
+    """
+    verified_user_id = user_id if user_id is not None else current_user_id(client)
+
     response = (
         client.table("profiles")
         .select("*")
-        .eq("id", current_user_id(client))
+        .eq("id", verified_user_id)
         .execute()
     )
 
