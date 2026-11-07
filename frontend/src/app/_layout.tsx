@@ -1,18 +1,19 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
+import { Stack } from "expo-router";
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+// Consistent wood/parchment header across screens.
+const screenOptions = {
+  headerStyle: { backgroundColor: "#4a2f14" },
+  headerTintColor: "#f0e0c0",
+  headerTitleStyle: { fontWeight: "600" as const },
+  contentStyle: { backgroundColor: "#000" },
+};
 
-SplashScreen.preventAutoHideAsync();
-
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+export default function RootLayout() {
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
-    </ThemeProvider>
+    <Stack screenOptions={screenOptions}>
+      <Stack.Screen name="index" options={{ title: "Trinket", headerShown: false }} />
+      <Stack.Screen name="board" options={{ title: "Quest Board" }} />
+      <Stack.Screen name="upload" options={{ title: "Upload Document" }} />
+    </Stack>
   );
 }

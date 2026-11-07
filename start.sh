@@ -39,8 +39,8 @@ if [[ ! -x "$ROOT_DIR/venv/bin/uvicorn" ]]; then
   exit 1
 fi
 
-if [[ ! -x "$ROOT_DIR/ClientApp/node_modules/.bin/expo" ]]; then
-  echo "Client dependencies are missing. Run npm ci in ClientApp/." >&2
+if [[ ! -x "$ROOT_DIR/frontend/node_modules/.bin/expo" ]]; then
+  echo "Frontend dependencies are missing. Run npm ci in frontend/." >&2
   exit 1
 fi
 
@@ -109,5 +109,5 @@ if [[ "$api_ready" != true ]]; then
 fi
 
 echo "Starting Expo client..."
-cd "$ROOT_DIR/ClientApp"
+cd "$ROOT_DIR/frontend"
 npm run start
