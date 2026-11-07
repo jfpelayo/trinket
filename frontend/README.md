@@ -14,26 +14,28 @@ Canonical Expo (SDK 57) app for Trinket. Consolidated on branch
   `mappaper.png`; they differ — Brian's was kept since the login
   fields depend on it.)
 
-## Preview flow
+## App flow
 
-`/` (login preview) → "Preview app (no sign-in)" → `/board` (sample
-quests, local only) → `/upload` (document → draft events).
+`/` (log in or sign up with Supabase email/password) → `/board` (your
+upcoming saved events) → `/upload` (upload a document → wait while dates are
+extracted → dismiss wrong ones → confirm). Signed-out users are sent back to
+`/`.
 
-**Nothing here signs in or saves.** The login fields are a visual
-preview only — Supabase auth is not wired up, Log In/Sign Up are
-disabled, and credentials are never sent, logged, or passed between
-routes. Board tasks are static samples. Uploaded documents produce
-draft events for review only; they are not saved or scheduled and no
-push notification is requested or sent.
+The app signs in directly with Supabase Auth and sends the session's access
+token to the backend on every request; it never sees the service key.
+Uploads stay "processing" until someone runs the backend extraction worker
+(`venv/bin/python -m backend.document_worker`). Confirming saves the dates;
+reminders and push notifications come in Phase 4.
 
 ## Environment
 
 Copy `.env.example` to `.env` (ignored by git) and set:
 
-- `EXPO_PUBLIC_API_URL` — public backend base URL (not a secret).
-  Web: `http://localhost:8000`. Physical device: `http://<LAN IP>:8000`.
-  Android emulator: `http://10.0.2.2:8000`. The upload screen appends
-  `/api/v1/upload` and shows an inline hint when it is unset.
+- `EXPO_PUBLIC_API_URL` — backend base URL. Web: `http://localhost:8000`.
+  Physical device: `http://<LAN IP>:8000`. Android emulator:
+  `http://10.0.2.2:8000`.
+- `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_KEY` — the same Supabase
+  project as the backend, publishable (anon) key only.
 
 ## Commands (run from `frontend/`)
 
@@ -42,7 +44,7 @@ npm ci                 # install deps
 npx expo start         # dev server (src/app routes; no extra config)
 npx expo lint          # lint
 npx tsc --noEmit       # typecheck (strict, @/ -> ./src/*, @/assets/* -> ./assets/*)
-npx tsx --test src/lib/upload.test.ts   # offline helper tests
+npx tsx --test src/lib/api.test.ts      # offline API client tests
 npx expo export --platform web          # static web bundle sanity check
 ```
 
@@ -51,15 +53,8 @@ backend and then runs `npm run start` here.
 
 ## Verification coverage
 
-Helper tests cover the API base URL trimming/missing value, success
-event parsing, malformed/4xx/502 backend error mapping, network
-failure, and that no device token is sent. They do not exercise real
-frontend sign-in, persistence, or push. The backend's authenticated
-profiles API already exists; connecting it to this UI is separate work.
-Native multipart byte transport still needs a device/emulator check.
-
-The web export, typecheck, lint, and helper tests pass. Expo's
-compatibility check still flags existing SDK 57 patch-version drift.
-The dependency audit also reports vulnerabilities, including high and
-critical findings. Neither dependency remediation nor production
-readiness is established by this consolidation.
+API client tests cover URL validation, strict response parsing, bearer
+headers, multipart upload without a manual Content-Type, error and
+expired-session messages, network failures, and the confirm, dismiss, and
+list routes. They do not hit a live Supabase project. Native multipart
+upload still needs a device or emulator check.

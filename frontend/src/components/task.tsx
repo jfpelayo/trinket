@@ -3,21 +3,21 @@ import { StyleSheet, Text, View } from "react-native";
 
 type Props = {
   label: string;
+  detail?: string;
 };
 
 const paper = require("@/assets/images/mappaper.png");
 
-// Static sample only — not an interactive control while the board is
-// a local preview.
-export default function Task({ label }: Props) {
+export default function Task({ label, detail }: Props) {
   return (
-    <View style={styles.wrap} accessibilityLabel={label}>
+    <View style={styles.wrap} accessibilityLabel={detail ? `${label}, ${detail}` : label}>
       <ImageBackground
         source={paper}
         contentFit="fill"
         style={styles.buttonImg}
       >
         <Text style={styles.buttonLabel}>{label}</Text>
+        {detail && <Text style={styles.detail}>{detail}</Text>}
       </ImageBackground>
     </View>
   );
@@ -42,4 +42,5 @@ const styles = StyleSheet.create({
     padding: 10,
     alignSelf: "center",
   },
+  detail: { color: "#40300f", fontSize: 13, alignSelf: "center" },
 });

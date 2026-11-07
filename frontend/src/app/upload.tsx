@@ -1,10 +1,9 @@
 import * as DocumentPicker from "expo-document-picker";
 import type { DocumentPickerAsset } from "expo-document-picker";
-import { Link } from "expo-router";
-import { useState } from "react";
+import { Link, Redirect } from "expo-router";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,21 +11,68 @@ import {
   View,
 } from "react-native";
 
+import { formatWhen } from "@/components/board";
 import {
-  EventItem,
-  getApiBase,
+  confirmDocument,
+  getDocument,
+  setEventStatus,
+  type TrinketDocument,
+  type TrinketEvent,
   uploadDocument,
-} from "@/lib/upload";
+} from "@/lib/api";
+import { useApi } from "@/lib/use-api";
+
+const POLL_MS = 3000;
+const FAILURE_MESSAGES: Record<string, string> = {
+  invalid_dates: "Some dates in this document were ambiguous, so nothing was saved. Try a clearer copy.",
+  worker_timeout: "Date extraction took too long and was stopped. Try again later.",
+};
 
 export default function UploadScreen() {
-  const [selectedFile, setSelectedFile] =
-    useState<DocumentPickerAsset | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [events, setEvents] = useState<EventItem[] | null>(null);
+  const state = useApi();
+  const api = state.kind === "ready" ? state.api : null;
+  const [selectedFile, setSelectedFile] = useState<DocumentPickerAsset | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [document, setDocument] = useState<TrinketDocument | null>(null);
+  const [events, setEvents] = useState<TrinketEvent[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
+  const mounted = useRef(true);
+  useEffect(() => () => {
+    mounted.current = false;
+  }, []);
 
-  const apiBase = getApiBase();
+  const show = (text: string | null, error = false) => {
+    setMessage(text);
+    setIsError(error);
+  };
+
+  // Poll while the worker extracts dates (can take a few minutes).
+  const documentId = document?.id;
+  const processing = document?.status === "processing";
+  useEffect(() => {
+    if (!api || !documentId || !processing) return;
+    const timer = setInterval(async () => {
+      try {
+        const result = await getDocument(api, documentId);
+        if (!mounted.current) return;
+        if (!result.ok) return show(result.message, true);
+        setDocument(result.value.document);
+        setEvents(result.value.events);
+        if (result.value.document.status === "failed") {
+          show(FAILURE_MESSAGES[result.value.document.error_code ?? ""] ??
+            "We couldn't read dates from this document. Try another file.", true);
+        } else if (result.value.document.status === "review") {
+          show("Review these dates, dismiss any that are wrong, then confirm.");
+        }
+      } catch {
+        if (mounted.current) show("Lost connection to the backend; still retrying…", true);
+      }
+    }, POLL_MS);
+    return () => clearInterval(timer);
+  }, [api, documentId, processing]);
+
+  if (state.kind === "signedOut") return <Redirect href="/" />;
 
   const pickDocument = async () => {
     try {
@@ -36,126 +82,137 @@ export default function UploadScreen() {
       });
       if (!result.canceled && result.assets?.length) {
         setSelectedFile(result.assets[0]);
-        setEvents(null);
-        setMessage(null);
-        setIsError(false);
+        setDocument(null);
+        setEvents([]);
+        show(null);
       }
     } catch {
-      setIsError(true);
-      setMessage("Could not open the document picker.");
+      show("Could not open the document picker.", true);
     }
   };
 
-  const upload = async () => {
-    if (!selectedFile || uploading) return;
-    if (!apiBase) {
-      setIsError(true);
-      setMessage(
-        Platform.OS === "web"
-          ? "EXPO_PUBLIC_API_URL is missing or invalid. Set an absolute http(s) URL in frontend/.env (e.g. http://localhost:8000) and restart Expo."
-          : "EXPO_PUBLIC_API_URL is missing or invalid. On a device/emulator set an absolute http(s) URL to your computer's LAN IP, e.g. http://192.168.x.x:8000 (Android emulator: http://10.0.2.2:8000), in frontend/.env and restart Expo.",
-      );
-      return;
-    }
-
-    setUploading(true);
-    setMessage(null);
-    setIsError(false);
+  const run = async (action: () => Promise<void>) => {
+    if (!api || busy) return;
+    setBusy(true);
     try {
-      const result = await uploadDocument(selectedFile, apiBase);
-      if (result.ok) {
-        setEvents(result.events);
-        setMessage(
-          `Processed ${result.filename || "document"} (timezone: ${result.userTimezone || "unknown"}).`,
-        );
-      } else {
-        setEvents(null);
-        setIsError(true);
-        setMessage(result.message);
-      }
+      await action();
     } catch {
-      setEvents(null);
-      setIsError(true);
-      setMessage(
-        `Could not reach the backend at ${apiBase}. Is it running?`,
-      );
+      show(`Could not reach the backend at ${api.base}. Is it running?`, true);
     } finally {
-      setUploading(false);
+      if (mounted.current) setBusy(false);
     }
   };
+
+  const upload = () => run(async () => {
+    if (!api || !selectedFile) return;
+    show(null);
+    const result = await uploadDocument(api, selectedFile);
+    if (!result.ok) return show(result.message, true);
+    setDocument(result.value.document);
+    setEvents([]);
+    show("Uploaded. Finding dates — this can take a few minutes.");
+  });
+
+  const toggleDismissed = (event: TrinketEvent) => run(async () => {
+    if (!api) return;
+    const result = await setEventStatus(api, event.id, event.status === "dismissed" ? "draft" : "dismissed");
+    if (!result.ok) return show(result.message, true);
+    setEvents((current) => current.map((e) => (e.id === event.id ? result.value : e)));
+  });
+
+  const confirmAll = () => run(async () => {
+    if (!api || !document) return;
+    const result = await confirmDocument(api, document.id);
+    if (!result.ok) return show(result.message, true);
+    setDocument(result.value);
+    setEvents((current) => current.map((e) => (e.status === "draft" ? { ...e, status: "confirmed" } : e)));
+    show("Saved to your quest board. Reminders will arrive in a later update.");
+  });
+
+  const reviewing = document?.status === "review";
+  const disabled = busy || !api || processing;
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-    >
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Upload a document</Text>
       <Text style={styles.subtitle}>
-        PDF or image — the backend extracts draft events for review.
+        PDF or image. Trinket finds the dates, then you review them before they are saved.
       </Text>
 
+      {state.kind === "misconfigured" && (
+        <Text style={[styles.message, styles.error]}>{state.message}</Text>
+      )}
+
       <Pressable
-        style={[styles.button, uploading && styles.buttonDisabled]}
+        style={[styles.button, disabled && styles.buttonDisabled]}
         onPress={pickDocument}
-        disabled={uploading}
+        disabled={disabled}
         accessibilityRole="button"
-        accessibilityState={{ disabled: uploading, busy: uploading }}
+        accessibilityState={{ disabled, busy }}
       >
         <Text style={styles.buttonText}>
-          {selectedFile
-            ? `Selected: ${selectedFile.name}`
-            : "Pick document (PDF / image)"}
+          {selectedFile ? `Selected: ${selectedFile.name}` : "Pick document (PDF / image)"}
         </Text>
       </Pressable>
 
-      {selectedFile && (
+      {selectedFile && !document && (
         <Pressable
-          style={[styles.button, styles.uploadButton, uploading && styles.buttonDisabled]}
+          style={[styles.button, styles.uploadButton, disabled && styles.buttonDisabled]}
           onPress={upload}
-          disabled={uploading}
+          disabled={disabled}
           accessibilityRole="button"
-          accessibilityState={{ disabled: uploading, busy: uploading }}
+          accessibilityState={{ disabled, busy }}
         >
-          {uploading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Upload & process</Text>
-          )}
+          {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Upload & find dates</Text>}
         </Pressable>
       )}
 
+      {processing && <ActivityIndicator color="#754a18" accessibilityLabel="Finding dates" />}
+
       {message && (
-        <Text style={[styles.message, isError ? styles.error : styles.success]}>
+        <Text accessibilityLiveRegion="polite" style={[styles.message, isError ? styles.error : styles.success]}>
           {message}
         </Text>
       )}
 
-      {events !== null && (
+      {document && document.status !== "processing" && document.status !== "failed" && (
         <View style={styles.results}>
           <Text style={styles.resultsTitle}>
-            Draft events — review only; not saved or scheduled
+            {reviewing ? "Dates found — not saved until you confirm" : "Saved dates"}
           </Text>
-          {events.length === 0 && (
-            <Text style={styles.empty}>
-              No events were found in this document.
-            </Text>
-          )}
-          {events.map((item, index) => (
-            <View key={index} style={styles.eventCard}>
-              <Text style={styles.eventTitle}>{item.title}</Text>
-              <Text style={styles.eventDetail}>Category: {item.category}</Text>
-              <Text style={styles.eventDetail}>Date: {item.event_date}</Text>
+          {events.length === 0 && <Text style={styles.empty}>No dates were found in this document.</Text>}
+          {events.map((event) => (
+            <View key={event.id} style={[styles.eventCard, event.status === "dismissed" && styles.dismissed]}>
+              <Text style={styles.eventTitle}>{event.title}</Text>
+              <Text style={styles.eventDetail}>{formatWhen(event)} · {event.category}</Text>
+              {reviewing && (
+                <View style={styles.eventActions}>
+                  <Pressable accessibilityRole="button" disabled={busy} onPress={() => toggleDismissed(event)}>
+                    <Text style={styles.smallAction}>
+                      {event.status === "dismissed" ? "Restore" : "Dismiss"}
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
             </View>
           ))}
+          {reviewing && (
+            <Pressable
+              style={[styles.button, styles.uploadButton, busy && styles.buttonDisabled]}
+              onPress={confirmAll}
+              disabled={busy}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: busy, busy }}
+            >
+              <Text style={styles.buttonText}>Confirm dates</Text>
+            </Pressable>
+          )}
         </View>
       )}
 
       <View style={styles.links}>
         <Link href="/board" style={styles.link}>
           Back to board
-        </Link>
-        <Link href="/" style={styles.link}>
-          Back to login
         </Link>
       </View>
     </ScrollView>
@@ -214,6 +271,9 @@ const styles = StyleSheet.create({
   },
   eventTitle: { fontSize: 16, fontWeight: "bold", color: "#2a1c0d" },
   eventDetail: { fontSize: 14, color: "#555", marginTop: 2 },
+  eventActions: { flexDirection: "row", gap: 16, marginTop: 8 },
+  smallAction: { color: "#754a18", textDecorationLine: "underline", fontSize: 14 },
+  dismissed: { opacity: 0.5 },
   links: {
     marginTop: 24,
     flexDirection: "row",

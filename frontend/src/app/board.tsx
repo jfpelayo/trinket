@@ -1,14 +1,53 @@
 import { ImageBackground } from "expo-image";
-import { Link } from "expo-router";
-import { StyleSheet, Text, View } from "react-native";
+import { Link, Redirect, useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import Board from "@/components/board";
+import { listEvents, type TrinketEvent } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
+import { useApi } from "@/lib/use-api";
 
 const background = require("@/assets/images/onboarding-bg.svg");
 
-// Local-only preview board: the quest list is static sample content,
-// nothing here is loaded from or saved to a backend.
+function startOfToday(): Date {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today;
+}
+
 export default function BoardScreen() {
+  const state = useApi();
+  const [events, setEvents] = useState<TrinketEvent[] | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const api = state.kind === "ready" ? state.api : null;
+
+  // Reload whenever the board regains focus, e.g. after confirming an upload.
+  useFocusEffect(
+    useCallback(() => {
+      if (!api) return;
+      let active = true;
+      listEvents(api, startOfToday())
+        .then((result) => {
+          if (!active) return;
+          if (result.ok) {
+            setEvents(result.value.filter((event) => event.status !== "dismissed"));
+            setMessage(null);
+          } else setMessage(result.message);
+        })
+        .catch(() => active && setMessage("Could not reach the backend. Is it running?"));
+      return () => {
+        active = false;
+      };
+    }, [api]),
+  );
+
+  if (state.kind === "signedOut") return <Redirect href="/" />;
+
+  const status =
+    state.kind === "misconfigured" ? state.message
+      : message ?? (events === null ? "Loading your quests…" : null);
+
   return (
     <View style={styles.container}>
       <ImageBackground
@@ -17,17 +56,19 @@ export default function BoardScreen() {
         style={styles.image}
       />
       <View style={styles.board}>
-        <Board questName="Sample quests" />
-        <Text style={styles.previewNote}>
-          Local-only preview — tasks are not saved or synced.
-        </Text>
+        <Board
+          questName="Upcoming quests"
+          events={events ?? []}
+          emptyMessage={events === null ? "" : "No upcoming deadlines yet. Upload a syllabus to add some."}
+        />
+        {status && <Text style={styles.previewNote}>{status}</Text>}
         <View style={styles.links}>
           <Link href="/upload" style={styles.link}>
             Upload document
           </Link>
-          <Link href="/" style={styles.link}>
-            Back to login
-          </Link>
+          <Pressable accessibilityRole="button" onPress={() => supabase.auth.signOut()}>
+            <Text style={styles.link}>Sign out</Text>
+          </Pressable>
         </View>
       </View>
     </View>

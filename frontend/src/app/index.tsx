@@ -1,6 +1,6 @@
 import { PirataOne_400Regular, useFonts } from "@expo-google-fonts/pirata-one";
 import { Image, ImageBackground } from "expo-image";
-import { router } from "expo-router";
+import { Redirect } from "expo-router";
 import { useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -13,15 +13,55 @@ import {
   View,
 } from "react-native";
 
-// Login PREVIEW only — Supabase sign-in is not connected yet.
-// Credentials are never logged, sent, or passed to other routes.
+import { supabase, supabaseConfigured, useSession } from "@/lib/supabase";
+
+type Mode = "signIn" | "signUp";
+
 export default function LoginScreen() {
   const [fontsLoaded, fontError] = useFonts({ PirataOne_400Regular });
-  const [username, setUsername] = useState("");
+  const session = useSession();
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [mode, setMode] = useState<Mode>("signIn");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(
+    supabaseConfigured
+      ? null
+      : "Sign-in is not configured. Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_KEY to frontend/.env and restart Expo.",
+  );
 
   // Fall back to the system font while Pirata loads or if it fails.
   const fontFamily = fontsLoaded && !fontError ? "PirataOne_400Regular" : undefined;
+
+  if (session) return <Redirect href="/board" />;
+
+  const submit = async () => {
+    if (!supabaseConfigured || busy) return;
+    if (!email.trim() || !password) {
+      setMessage("Enter your email and password.");
+      return;
+    }
+    setBusy(true);
+    setMessage(null);
+    try {
+      const credentials = { email: email.trim(), password };
+      const { data, error } = mode === "signIn"
+        ? await supabase.auth.signInWithPassword(credentials)
+        : await supabase.auth.signUp(credentials);
+      if (error) setMessage(error.message);
+      else if (mode === "signUp" && !data.session) {
+        setMessage("Check your email to confirm your account, then log in.");
+        setMode("signIn");
+      }
+    } catch {
+      setMessage("Could not reach the sign-in service. Check your connection.");
+    } finally {
+      setPassword("");
+      setBusy(false);
+    }
+  };
+
+  const actionLabel = mode === "signIn" ? "Log in" : "Sign up";
 
   return (
     <KeyboardAvoidingView
@@ -45,9 +85,11 @@ export default function LoginScreen() {
           />
 
           <View style={styles.form}>
-            <Text style={[styles.previewBanner, { fontFamily }]}>
-              Login preview — Supabase sign-in is not connected yet
-            </Text>
+            {message && (
+              <Text accessibilityLiveRegion="polite" style={[styles.previewBanner, { fontFamily }]}>
+                {message}
+              </Text>
+            )}
 
             <ImageBackground
               source={require("@/assets/images/mappaper.png")}
@@ -60,15 +102,17 @@ export default function LoginScreen() {
                 style={styles.fieldIcon}
               />
               <View style={styles.fieldTextWrap}>
-                <Text style={[styles.fieldLabel, { fontFamily }]}>Username</Text>
+                <Text style={[styles.fieldLabel, { fontFamily }]}>Email</Text>
                 <TextInput
-                  value={username}
-                  onChangeText={setUsername}
-                  placeholder="Username"
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="you@berkeley.edu"
                   placeholderTextColor="#40300f"
                   autoCapitalize="none"
                   autoCorrect={false}
-                  accessibilityLabel="Username"
+                  autoComplete="email"
+                  keyboardType="email-address"
+                  accessibilityLabel="Email"
                   style={[styles.input, { fontFamily }]}
                 />
               </View>
@@ -89,11 +133,13 @@ export default function LoginScreen() {
                 <TextInput
                   value={password}
                   onChangeText={setPassword}
+                  onSubmitEditing={submit}
                   placeholder="Password"
                   placeholderTextColor="#40300f"
                   secureTextEntry
                   autoCapitalize="none"
                   autoCorrect={false}
+                  autoComplete={mode === "signIn" ? "current-password" : "new-password"}
                   accessibilityLabel="Password"
                   style={[styles.input, { fontFamily }]}
                 />
@@ -101,11 +147,12 @@ export default function LoginScreen() {
             </ImageBackground>
 
             <Pressable
-              disabled
+              onPress={submit}
+              disabled={busy || !supabaseConfigured}
               accessibilityRole="button"
-              accessibilityLabel="Log in (disabled in preview)"
-              accessibilityState={{ disabled: true }}
-              style={styles.disabledButtonWrap}
+              accessibilityLabel={actionLabel}
+              accessibilityState={{ disabled: busy || !supabaseConfigured, busy }}
+              style={[styles.buttonWrap, (busy || !supabaseConfigured) && styles.buttonBusy]}
             >
               <ImageBackground
                 source={require("@/assets/images/woodtexture1.png")}
@@ -113,45 +160,27 @@ export default function LoginScreen() {
                 style={styles.woodButton}
               >
                 <Text style={[styles.woodButtonText, { fontFamily }]}>
-                  Log in
+                  {busy ? "One moment…" : actionLabel}
                 </Text>
               </ImageBackground>
             </Pressable>
-            <Text style={[styles.disabledNote, { fontFamily }]}>
-              Sign-in is disabled until accounts are connected.
-            </Text>
 
             <View style={styles.signupRow}>
               <Text style={[styles.signupText, { fontFamily }]}>
-                Don&apos;t have an account?{" "}
+                {mode === "signIn" ? "Don't have an account? " : "Already have an account? "}
               </Text>
-              <Text
-                accessibilityLabel="Sign up (disabled in preview)"
-                style={[styles.signupLinkDisabled, { fontFamily }]}
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  setMode(mode === "signIn" ? "signUp" : "signIn");
+                  setMessage(null);
+                }}
               >
-                Sign Up
-              </Text>
-              <Text style={[styles.signupText, { fontFamily }]}> Now!</Text>
-            </View>
-
-            <Pressable
-              onPress={() => router.push("/board")}
-              accessibilityRole="button"
-              accessibilityLabel="Preview app without signing in"
-              style={styles.previewLinkWrap}
-            >
-              {({ pressed }) => (
-                <Text
-                  style={[
-                    styles.previewLink,
-                    { fontFamily },
-                    pressed && styles.previewLinkPressed,
-                  ]}
-                >
-                  Preview app (no sign-in) →
+                <Text style={[styles.signupLink, { fontFamily }]}>
+                  {mode === "signIn" ? "Sign Up" : "Log In"}
                 </Text>
-              )}
-            </Pressable>
+              </Pressable>
+            </View>
           </View>
         </ImageBackground>
       </ScrollView>
@@ -214,7 +243,8 @@ const styles = StyleSheet.create({
     color: "#040000",
     minWidth: 0,
   },
-  disabledButtonWrap: { width: "100%", opacity: 0.55, marginTop: 4 },
+  buttonWrap: { width: "100%", marginTop: 4 },
+  buttonBusy: { opacity: 0.55 },
   woodButton: {
     borderRadius: 30,
     overflow: "hidden",
@@ -224,15 +254,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   woodButtonText: { fontSize: 26, color: "#040000" },
-  disabledNote: {
-    fontSize: 14,
-    color: "#f0e0c0",
-    backgroundColor: "rgba(0,0,0,0.45)",
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    textAlign: "center",
-  },
   signupRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -243,20 +264,9 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   signupText: { fontSize: 16, color: "#f0e0c0" },
-  signupLinkDisabled: {
+  signupLink: {
     fontSize: 16,
-    color: "#9a8a6a",
+    color: "#ffe9b8",
     textDecorationLine: "underline",
   },
-  previewLinkWrap: { marginTop: 12 },
-  previewLink: {
-    fontSize: 18,
-    color: "#f0e0c0",
-    textDecorationLine: "underline",
-    backgroundColor: "rgba(0,0,0,0.5)",
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  previewLinkPressed: { color: "#ffffff" },
 });

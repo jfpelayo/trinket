@@ -29,11 +29,11 @@ start` is sufficient.
 The earlier `ClientApp/` tree is kept on disk locally but is no
 longer tracked — treat `frontend/` as the only app going forward.
 
-## Known preview boundaries (don't treat as bugs)
+## Current boundaries
 
-- Login is a visual preview: sign-in disabled, no Supabase auth yet,
-  credentials never leave the fields.
-- Board content is sample-only; no task persistence.
-- Upload returns draft events for review; nothing is saved,
-  scheduled, or pushed (device-token/notification flow removed).
+- Login uses real Supabase email/password auth (set the env values in
+  `.env.example`). The board shows the signed-in user's saved events.
+- Upload → review → confirm uses the Phase 3 backend routes. Extraction
+  needs the backend worker running on a team-controlled machine.
+- Reminders and push notifications are Phase 4.
 - Production model host is unresolved; free-only controlled infra.
