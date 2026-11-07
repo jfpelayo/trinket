@@ -1,5 +1,7 @@
+// importing components from react-native which are building blocks for things like images, text, buttons
 import { Image, ImageBackground, Pressable, Text, Platform, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Link } from 'expo-router';
 
 export default function HomeScreen() {
   return (
@@ -49,6 +51,11 @@ export default function HomeScreen() {
               resizeMode="contain"
             />
           </Pressable>
+          <Link href="/uploadsyllabus" asChild>
+            <Pressable>
+              <Text> Open the new screen </Text>
+            </Pressable>
+          </Link>
 
         </View>
       </SafeAreaView>
