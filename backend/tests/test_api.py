@@ -20,6 +20,7 @@ import httpx
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = BACKEND_DIR.parent
 
+import backend.extraction as extraction  # noqa: E402
 import backend.main as main  # noqa: E402
 import backend.routers.profiles as profiles_router  # noqa: E402
 from supabase_auth.errors import AuthApiError  # noqa: E402
@@ -340,7 +341,7 @@ class TestRootChatUpload(ApiTestCase):
             document.new_page()
         file_bytes = document.tobytes()
         document.close()
-        with mock.patch.object(main, "get_ocr_reader") as ocr:
+        with mock.patch.object(extraction, "get_ocr_reader") as ocr:
             with self.assertRaises(main.DocumentInputError):
                 main.extract_raw_text(file_bytes, "notes.pdf")
         ocr.assert_not_called()
@@ -360,7 +361,7 @@ class TestRootChatUpload(ApiTestCase):
         )
         fake_ollama = FakeOllamaClient(response_body)
         with mock.patch.object(
-            main.httpx, "AsyncClient", return_value=fake_ollama
+            extraction.httpx, "AsyncClient", return_value=fake_ollama
         ):
             result = asyncio.run(
                 main.parse_events_with_ollama(
@@ -379,7 +380,7 @@ class TestRootChatUpload(ApiTestCase):
             '"event_date":"not-a-date"}]}'
         )
         with mock.patch.object(
-            main.httpx, "AsyncClient", return_value=fake_ollama
+            extraction.httpx, "AsyncClient", return_value=fake_ollama
         ):
             with self.assertRaises(main.EventExtractionError):
                 asyncio.run(main.parse_events_with_ollama("text", "UTC"))
@@ -387,7 +388,7 @@ class TestRootChatUpload(ApiTestCase):
     def test_ollama_http_failure_fails_extraction(self):
         fake_ollama = FakeOllamaClient("{}", status_code=503)
         with mock.patch.object(
-            main.httpx, "AsyncClient", return_value=fake_ollama
+            extraction.httpx, "AsyncClient", return_value=fake_ollama
         ):
             with self.assertRaises(main.EventExtractionError):
                 asyncio.run(main.parse_events_with_ollama("text", "UTC"))
@@ -395,7 +396,7 @@ class TestRootChatUpload(ApiTestCase):
     def test_ollama_invalid_json_fails_extraction(self):
         fake_ollama = FakeOllamaClient(raw_content=b"{")
         with mock.patch.object(
-            main.httpx, "AsyncClient", return_value=fake_ollama
+            extraction.httpx, "AsyncClient", return_value=fake_ollama
         ):
             with self.assertRaises(main.EventExtractionError):
                 asyncio.run(main.parse_events_with_ollama("text", "UTC"))
