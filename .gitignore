@@ -1,0 +1,35 @@
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+*firebase-adminsdk*.json
+*service-account*.json
+*.pem
+
+# Local data and generated files
+.DS_Store
+*.rdb
+*.db
+*.sqlite
+*.sqlite3
+
+# Python / FastAPI
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+.pytest_cache/
+
+# Node / React Native
+node_modules/
+.expo/
+dist/
+web-build/
+
+# Backend-specific local artifacts
+backend/.venv/
+backend/node_modules/
+
+# Local editor and agent settings from the former ClientApp gitlink
+ClientApp/.claude/
+ClientApp/.vscode/
