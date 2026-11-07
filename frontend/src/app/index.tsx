@@ -4,15 +4,17 @@ import { useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 
+import PhoneFrame from '@/components/phone-frame';
+
 export default function HomeScreen() {
 useFonts({ PirataOne_400Regular });
 const [username, setUsername] = useState('');
 const [password, setPassword] = useState('');
 return (
-    <View style={{ flex: 1, alignItems: 'center', backgroundColor: '#000' }}>
+    <PhoneFrame>
     <ImageBackground
         source={require('@/assets/images/login-page.png')}
-        style={{ flex: 1, width: '100%', maxWidth: 500, maxHeight: 900}}
+        style={{ flex: 1 }}
       >
         <Pressable
           id="login-button"
@@ -93,6 +95,6 @@ return (
             style={{ position: 'absolute', top: 75, alignSelf: 'center', height: 400, width: 400 }}>
         </Image>
       </ImageBackground>
-    </View>
+    </PhoneFrame>
   );
 }

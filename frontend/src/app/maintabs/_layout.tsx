@@ -2,6 +2,7 @@ import { Image, ImageBackground, ImageProps } from 'expo-image';
 import { Tabs } from 'expo-router/tabs';
 import { StyleSheet, Text, View } from 'react-native';
 
+import PhoneFrame from '@/components/phone-frame';
 import { f1 } from '@/constants/theme';
 
 // size of every tab icon: change this one number to resize them all
@@ -14,8 +15,7 @@ const COIN_SIZE = 60;
 export default function TabLayout() {
   return (
     // the phone-sized frame, around the pages AND the bar
-    <View style={{ flex: 1, alignItems: 'center', backgroundColor: '#000' }}>
-      <View style={{ flex: 1, width: '100%', maxWidth: 500, maxHeight: 900 }}>
+    <PhoneFrame>
         <Tabs
           screenOptions={{
             tabBarStyle: { backgroundColor: 'transparent', borderTopWidth: 5, borderTopColor: '#D99B45', height: 85 },
@@ -78,8 +78,7 @@ export default function TabLayout() {
 
         {/* after <Tabs> so it's drawn on top of every page */}
         <TrinketCounter value={120} />
-      </View>
-    </View>
+    </PhoneFrame>
   );
 }
 
