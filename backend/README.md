@@ -18,15 +18,21 @@ variables win, then root `.env`, then `backend/.env`. See
   profiles API to build per-request clients.
 - `SUPABASE_SERVICE_KEY` — privileged; intentionally not used by the
   HTTP profiles endpoints.
-- `OLLAMA_URL`, `OLLAMA_MODEL`, `REDIS_URL`, `MAX_UPLOAD_MB` — Phase 0
-  document-parsing / scheduler settings (unchanged names/defaults).
+- `OLLAMA_URL`, `OLLAMA_MODEL`, `REDIS_URL`, `MAX_UPLOAD_MB` — document
+  parsing / scheduler settings. `MAX_UPLOAD_MB` defaults to 10.
 
 ## Endpoints
 
 - `GET /` — health/status.
-- `POST /api/v1/upload` — multipart file upload; extracts events via
-  PyMuPDF/EasyOCR + local Ollama; optionally queues Redis-backed
-  reminder jobs when `device_token` is provided.
+- `POST /api/v1/upload` — multipart PDF or JPEG/PNG/BMP/TIFF upload;
+  extracts events via PyMuPDF/EasyOCR + local Ollama. Uploads are
+  limited to `MAX_UPLOAD_MB`; PDFs are limited to 100 pages and extracted
+  text to 60,000 characters. Long documents are parsed in 12,000-character
+  sections. Unsupported files return 415, oversized/unprocessable inputs
+  return 413 or 422, and Ollama failures return 502 rather than fabricated
+  events. Successful extracted events are drafts for user review; reminders
+  are not scheduled during upload. `device_token` remains accepted for
+  compatibility but is not used.
 - `POST /api/v1/chat` — stub echo: `{"message": str}` ->
   `{"reply": "Trinket received your message: <message>"}`. No external
   model calls; real chat inference is deferred beyond launch scope
@@ -80,8 +86,10 @@ they are not executed by this codebase.
   merge; retained as a placeholder. No active frontend integration;
   no existing frontend files were changed.
 - Expo Push is the chosen push provider; delivery is not implemented —
-  `trigger_notification_job` still only prints.
+  `trigger_notification_job` still only prints. Reminder scheduling is
+  not connected to upload results; a future review/confirmation flow must
+  schedule reminders explicitly.
 - Production model host is unresolved (free-only, controlled infra).
-- Phase 2 scope (trustworthy extraction work, notification behavior,
-  any broader restructure) is not implemented here; real chat
-  inference is deferred beyond launch scope entirely.
+- Phase 2 extraction hardening is implemented in the upload endpoint.
+  Persisted review/confirmation and reminder scheduling are not implemented;
+  real chat inference is deferred beyond launch scope entirely.

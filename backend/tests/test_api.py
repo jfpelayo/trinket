@@ -5,6 +5,7 @@ scheduler start/shutdown, EasyOCR, Ollama, and Supabase transport.
 No real network calls are made.
 """
 
+import asyncio
 import json
 import os
 import subprocess
@@ -122,6 +123,34 @@ class FakeClientFactory:
         return client
 
 
+class FakeOllamaClient:
+    def __init__(self, response_body=None, status_code=200, raw_content=None):
+        self.response_body = response_body
+        self.status_code = status_code
+        self.raw_content = raw_content
+        self.prompts = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, traceback):
+        return None
+
+    async def post(self, url, json, timeout):
+        self.prompts.append(json["prompt"])
+        if self.raw_content is not None:
+            return httpx.Response(
+                self.status_code,
+                request=httpx.Request("POST", url),
+                content=self.raw_content,
+            )
+        return httpx.Response(
+            self.status_code,
+            request=httpx.Request("POST", url),
+            json={"response": self.response_body},
+        )
+
+
 TOKENS = {"token-a": "user-a-id", "token-b": "user-b-id"}
 ANON_KEY = "anon-public-key"
 SERVICE_KEY = "service-role-key"
@@ -236,12 +265,14 @@ class TestRootChatUpload(ApiTestCase):
         ) as ollama:
             r = self.client.post(
                 "/api/v1/upload",
-                files={"file": ("notes.txt", b"content", "text/plain")},
+                files={"file": ("notes.pdf", b"content", "application/pdf")},
+                data={"device_token": "device-token"},
             )
         self.assertEqual(r.status_code, 200)
         body = r.json()
         self.assertEqual(body["status"], "success")
-        self.assertEqual(body["filename"], "notes.txt")
+        self.assertEqual(body["filename"], "notes.pdf")
+        self.assertTrue(body["review_required"])
         self.assertEqual(
             body["extracted_events"],
             [
@@ -254,6 +285,120 @@ class TestRootChatUpload(ApiTestCase):
         )
         ocr.assert_called_once()
         ollama.assert_called_once()
+        self.scheduler_mock.add_job.assert_not_called()
+
+    def test_upload_rejects_unsupported_file_type(self):
+        r = self.client.post(
+            "/api/v1/upload",
+            files={"file": ("notes.txt", b"content", "text/plain")},
+        )
+        self.assertEqual(r.status_code, 415)
+
+    def test_upload_rejects_file_over_size_limit(self):
+        with mock.patch.object(main, "MAX_UPLOAD_BYTES", 3):
+            r = self.client.post(
+                "/api/v1/upload",
+                files={"file": ("notes.pdf", b"four", "application/pdf")},
+            )
+        self.assertEqual(r.status_code, 413)
+
+    def test_upload_returns_explicit_extraction_failure(self):
+        with mock.patch.object(
+            main, "extract_raw_text", return_value="some text"
+        ), mock.patch.object(
+            main,
+            "parse_events_with_ollama",
+            side_effect=main.EventExtractionError("offline"),
+        ):
+            r = self.client.post(
+                "/api/v1/upload",
+                files={"file": ("notes.pdf", b"content", "application/pdf")},
+            )
+        self.assertEqual(r.status_code, 502)
+        self.assertEqual(r.json(), {"status": "extraction_failed"})
+
+    def test_upload_with_no_ocr_text_is_unprocessable(self):
+        with mock.patch.object(main, "extract_raw_text", return_value="  "):
+            r = self.client.post(
+                "/api/v1/upload",
+                files={"file": ("notes.pdf", b"content", "application/pdf")},
+            )
+        self.assertEqual(r.status_code, 422)
+        self.assertEqual(r.json(), {"status": "no_text_found"})
+
+    def test_upload_rejects_invalid_pdf(self):
+        r = self.client.post(
+            "/api/v1/upload",
+            files={"file": ("notes.pdf", b"not a PDF", "application/pdf")},
+        )
+        self.assertEqual(r.status_code, 422)
+        self.assertEqual(r.json()["detail"], "Uploaded PDF is invalid")
+
+    def test_pdf_page_limit_is_enforced_before_ocr(self):
+        document = main.fitz.open()
+        for _ in range(main.MAX_PDF_PAGES + 1):
+            document.new_page()
+        file_bytes = document.tobytes()
+        document.close()
+        with mock.patch.object(main, "get_ocr_reader") as ocr:
+            with self.assertRaises(main.DocumentInputError):
+                main.extract_raw_text(file_bytes, "notes.pdf")
+        ocr.assert_not_called()
+
+    def test_event_item_rejects_invalid_date(self):
+        with self.assertRaises(ValueError):
+            main.EventItem(
+                title="Midterm",
+                category="deadline",
+                event_date="not-a-date",
+            )
+
+    def test_long_extraction_text_is_chunked_and_deduplicated(self):
+        response_body = (
+            '{"events":[{"title":"Midterm","category":"deadline",'
+            '"event_date":"2026-07-12T10:00:00"}]}'
+        )
+        fake_ollama = FakeOllamaClient(response_body)
+        with mock.patch.object(
+            main.httpx, "AsyncClient", return_value=fake_ollama
+        ):
+            result = asyncio.run(
+                main.parse_events_with_ollama(
+                    "x" * (main.OLLAMA_CHUNK_CHARS + 1), "UTC"
+                )
+            )
+        self.assertEqual(len(fake_ollama.prompts), 2)
+        self.assertTrue(
+            all("Today's date" in prompt for prompt in fake_ollama.prompts)
+        )
+        self.assertEqual(len(result.events), 1)
+
+    def test_invalid_ollama_date_fails_extraction(self):
+        fake_ollama = FakeOllamaClient(
+            '{"events":[{"title":"Midterm","category":"deadline",'
+            '"event_date":"not-a-date"}]}'
+        )
+        with mock.patch.object(
+            main.httpx, "AsyncClient", return_value=fake_ollama
+        ):
+            with self.assertRaises(main.EventExtractionError):
+                asyncio.run(main.parse_events_with_ollama("text", "UTC"))
+
+    def test_ollama_http_failure_fails_extraction(self):
+        fake_ollama = FakeOllamaClient("{}", status_code=503)
+        with mock.patch.object(
+            main.httpx, "AsyncClient", return_value=fake_ollama
+        ):
+            with self.assertRaises(main.EventExtractionError):
+                asyncio.run(main.parse_events_with_ollama("text", "UTC"))
+
+    def test_ollama_invalid_json_fails_extraction(self):
+        fake_ollama = FakeOllamaClient(raw_content=b"{")
+        with mock.patch.object(
+            main.httpx, "AsyncClient", return_value=fake_ollama
+        ):
+            with self.assertRaises(main.EventExtractionError):
+                asyncio.run(main.parse_events_with_ollama("text", "UTC"))
 
     def test_scheduler_started_and_stopped(self):
         self.scheduler_mock.start.assert_called_once()
