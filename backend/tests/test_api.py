@@ -20,6 +20,7 @@ import httpx
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = BACKEND_DIR.parent
 
+import backend.chatbot as chatbot  # noqa: E402
 import backend.main as main  # noqa: E402
 import backend.routers.profiles as profiles_router  # noqa: E402
 from supabase_auth.errors import AuthApiError  # noqa: E402
@@ -165,6 +166,8 @@ class ApiTestCase(unittest.TestCase):
                 "SUPABASE_URL": SUPABASE_URL,
                 "SUPABASE_KEY": ANON_KEY,
                 "SUPABASE_SERVICE_KEY": SERVICE_KEY,
+                # Blank key keeps chat on the echo path unless a test opts in.
+                "GROQ_API_KEY": "",
             },
         )
         self.env.start()
@@ -231,21 +234,111 @@ class TestRootChatUpload(ApiTestCase):
         self.assertIn("status", r.json())
 
     def test_chat_echo(self):
-        r = self.client.post("/api/v1/chat", json={"message": "hi there"})
+        r = self.client.post(
+            "/api/v1/chat", json={"message": "hi there"}, headers=self.auth("token-a")
+        )
         self.assertEqual(r.status_code, 200)
         self.assertEqual(
             r.json()["reply"], "Trinket received your message: hi there"
         )
 
     def test_chat_legacy_alias(self):
-        r = self.client.post("/chat", json={"message": "old"})
+        r = self.client.post(
+            "/chat", json={"message": "old"}, headers=self.auth("token-a")
+        )
         self.assertEqual(r.status_code, 200)
         self.assertEqual(
             r.json()["reply"], "Trinket received your message: old"
         )
 
     def test_chat_missing_message_422(self):
-        r = self.client.post("/api/v1/chat", json={})
+        r = self.client.post(
+            "/api/v1/chat", json={}, headers=self.auth("token-a")
+        )
+        self.assertEqual(r.status_code, 422)
+
+    def _fake_groq(self, handler):
+        seen = []
+
+        def recording_handler(request):
+            seen.append(request)
+            return handler(request)
+
+        transport = httpx.MockTransport(recording_handler)
+        patcher = mock.patch.object(
+            chatbot,
+            "_make_client",
+            lambda: httpx.AsyncClient(transport=transport),
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        env = mock.patch.dict(os.environ, {"GROQ_API_KEY": "test-groq-key"})
+        env.start()
+        self.addCleanup(env.stop)
+        return seen
+
+    def test_chat_uses_groq_reply_when_key_set(self):
+        seen = self._fake_groq(
+            lambda request: httpx.Response(
+                200,
+                json={"choices": [{"message": {"content": " You got this! "}}]},
+            )
+        )
+        r = self.client.post(
+            "/api/v1/chat", json={"message": "help me start"}, headers=self.auth("token-a")
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["reply"], "You got this!")
+
+        self.assertEqual(len(seen), 1)
+        request = seen[0]
+        self.assertEqual(str(request.url), chatbot.GROQ_CHAT_URL)
+        self.assertEqual(request.headers["Authorization"], "Bearer test-groq-key")
+        body = json.loads(request.content)
+        self.assertEqual(body["messages"][0]["role"], "system")
+        self.assertEqual(
+            body["messages"][1], {"role": "user", "content": "help me start"}
+        )
+
+    def test_chat_falls_back_to_echo_on_groq_error(self):
+        self._fake_groq(
+            lambda request: httpx.Response(429, json={"error": "rate limited"})
+        )
+        r = self.client.post(
+            "/api/v1/chat", json={"message": "hi"}, headers=self.auth("token-a")
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["reply"], "Trinket received your message: hi")
+
+    def test_chat_falls_back_to_echo_on_malformed_groq_body(self):
+        self._fake_groq(lambda request: httpx.Response(200, json={"oops": 1}))
+        r = self.client.post(
+            "/api/v1/chat", json={"message": "hi"}, headers=self.auth("token-a")
+        )
+        self.assertEqual(r.json()["reply"], "Trinket received your message: hi")
+
+    def test_chat_requires_login_401(self):
+        seen = self._fake_groq(lambda request: httpx.Response(500))
+        r = self.client.post("/api/v1/chat", json={"message": "hi"})
+        self.assertEqual(r.status_code, 401)
+        self.assertEqual(seen, [])  # Groq is never called
+
+    def test_chat_rejects_bad_token_401(self):
+        seen = self._fake_groq(lambda request: httpx.Response(500))
+        r = self.client.post(
+            "/api/v1/chat", json={"message": "hi"}, headers=self.auth("bad-token")
+        )
+        self.assertEqual(r.status_code, 401)
+        self.assertEqual(seen, [])
+
+    def test_chat_legacy_alias_requires_login_401(self):
+        r = self.client.post("/chat", json={"message": "hi"})
+        self.assertEqual(r.status_code, 401)
+
+    def test_chat_rejects_overlong_message_422(self):
+        r = self.client.post(
+            "/api/v1/chat", json={"message": "x" * 2001}, headers=self.auth("token-a")
+        )
         self.assertEqual(r.status_code, 422)
 
     def test_upload_returns_events_contract(self):
