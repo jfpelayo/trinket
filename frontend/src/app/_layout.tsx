@@ -1,18 +1,31 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
-
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
-
-SplashScreen.preventAutoHideAsync();
-
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+import { Stack } from "expo-router";
+import { View, Image, StyleSheet, useWindowDimensions } from "react-native";
+// import { useSafeAreaInsets } from "react-native-safe-area-context";
+// i made background in layout so each screen that is made its own file should work with stack to have the same background
+// added stack.screen titles for log in (index) and create account page
+export default function RootLayout() {
+  const { width, height } = useWindowDimensions();
+  // const insets = useSafeAreaInsets();
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
-    </ThemeProvider>
+    <View style={styles.container}>
+      <Image
+      source={require("../../assets/images/good-trinnket-background.png")}
+      style={[StyleSheet.absoluteFill, {width, height}] }
+      resizeMode="cover"
+    />
+      <Stack screenOptions={{ contentStyle: { backgroundColor: "transparent" }, headerTransparent: true, headerTintColor: "#fff", headerTitleStyle: { color: "white" } }}>
+        {/* <Stack.Screen name= "index" options={{ title: 'Log In' }} />
+        <Stack.Screen name= "createaccount" options={{ title: 'Create Account' }} /> */}
+        <Stack.Screen name= "(tabs)" options={{ headerShown: false }} />
+      </Stack>
+      </View>
   );
 }
+
+
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+})
