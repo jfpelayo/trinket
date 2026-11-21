@@ -1,4 +1,4 @@
-import { StyleSheet, View, Pressable, Text, Image, ImageBackground } from "react-native";
+import { ImageBackground, Pressable, StyleSheet, Text } from "react-native";
 
  type Props = {
     label: string;
@@ -6,13 +6,13 @@ import { StyleSheet, View, Pressable, Text, Image, ImageBackground } from "react
 
 const paper = require('@/assets/images/mappaper.png');
 
- export default function Task({ label }: Props) {
+ export default function TaskButton({ label }: Props) {
     return (
         <Pressable style={styles.button} onPress={() => alert('task complete!')}>
             {/* <ImageBackground source={paper} contentFit='fill' style={styles.buttonImg}></ImageBackground> */}
             <ImageBackground
             source={paper}
-            contentFit="fill"
+            // contentFit="fill"    
             style={styles.buttonImg}>
                 <Text style={styles.buttonLabel}>{label}</Text>
             </ImageBackground>
@@ -22,37 +22,33 @@ const paper = require('@/assets/images/mappaper.png');
 
 const styles = StyleSheet.create({
     button: {
-        // height: 50,
-        // borderRadius: 10,
-        // width: '100%',
-        // height: '100%',
-        padding: 20,
+        padding: 80,
         alignSelf: 'center',
         position: 'absolute',
         alignItems: 'center',
         justifyContent: 'center',
         flexDirection: 'row',
-        borderColor: 'black'
+        borderColor: 'black',
+        width: '100%'
     },
     buttonImg: {
-        // position: 'absolute',
         overflow: 'hidden',
-        padding: 20
-        // paddingLeft: 10,
-        // paddingRight: 10,
-        // width: 600,
-        // height: 50
-        
+        padding: 20,
+        flex: 1,
+        shadowColor: '#000000',
+        shadowOffset: {
+            width: 0,
+            height: 2,
+        },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
     },
     buttonLabel: {
-        color: 'black',
-        // alignItems: 'flex-start',
+        color: 'white',
         fontSize: 16,
         padding: 10,
-        // paddingLeft: 30,
-        // paddingTop: 12,
         verticalAlign: 'middle',
-        // fontFamily: 'PirataOne_400Regular'
-        alignSelf: 'center'
+        alignSelf: 'center',
+        width: '100%'
     },
  });

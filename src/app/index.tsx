@@ -1,7 +1,6 @@
-import { View, StyleSheet } from 'react-native';
-import { Image, ImageBackground } from 'expo-image';
-import Task from '@/components/task';
 import Board from '@/components/board';
+import { ImageBackground } from 'expo-image';
+import { StyleSheet, View } from 'react-native';
 
 const background = require('@/assets/images/onboarding-bg.svg');
 export default function Index() {
