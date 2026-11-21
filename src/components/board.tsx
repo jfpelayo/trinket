@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ImageBackground, StyleSheet, Text, View } from "react-native";
+import { ImageBackground, Pressable, StyleSheet, Text, View } from "react-native";
 import TaskButton from "./taskButton";
 
 type Props = {
@@ -18,14 +18,18 @@ const wood = require('@/assets/images/woodbg.png');
 export default function Board({ questName }: Props) {
     const [tasks, setTasks] = useState<Task[]>([]);
     function addTask(label: string) {
-    const newTask: Task = {
-        id: '0', // i don't know what to do for this actually
-        label: label
-    };
-    setTasks([...tasks, newTask]);
-}
+        const newTask: Task = {
+            id: '0', // i don't know what to do for this actually
+            label: label
+        };
+        setTasks([...tasks, newTask]);
+    }
+    
     return (
         <View style={styles.board}>
+            <Pressable onPress={() => addTask('new task')}>
+                <Text style={styles.text}> add task </Text>
+            </Pressable>
             <ImageBackground source={wood} style={styles.bg}>
                 <Text style={styles.text}>Task Board</Text>
                 {tasks.map((task) => (
