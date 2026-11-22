@@ -9,19 +9,35 @@ export default function CreateAccount() {
     return (
         <Background>
             <View style={styles.container}>
-            <Text>Create Account Screen</Text>
+                
+                <Image
+                source={require("../../assets/images/createaccountactual.png")}
+                style={styles.bigtrinketlogo}
+                resizeMode="stretch"
+                />
+                <Image
+                source={require("../../assets/images/Username-button.png")}
+                style={styles.usernameButton}
+                resizeMode="contain"
+                />
+                <Image
+                source={require("../../assets/images/Email-Button.png")}
+                style={styles.emailButton}
+                resizeMode="contain"
+                />
+                <Image
+                source={require("../../assets/images/Password-Button.png")}
+                style={styles.PasswordButton}
+                resizeMode="contain"
+                />
             <Link href="/testhomepage" asChild>
-                  <Pressable style={styles.button}>
-                    {/* <Image
-      source={require("../../assets/images/signup-button.png")}
-      style={StyleSheet.absoluteFill}
-      resizeMode="stretch"
-    /> */}
-                    <Text style= {styles.text}>
-                        Sign Up!
-                    </Text>
-                  
-                  </Pressable>
+                <Pressable style={styles.signupbutton}>
+                <Image
+                source={require("../../assets/images/Sign-Up-Button.png")}
+                style={styles.buttonImage}
+                resizeMode="stretch"
+                />
+                </Pressable>
             </Link>
         </View>
         </Background>
@@ -32,17 +48,52 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         alignItems: 'center',
-        justifyContent: 'center',
+        //justifyContent: 'center',
     },
-    button: {
-        paddingHorizontal: 24,
-        paddingVertical: 12,
-        borderRadius: 12,
+    usernameButton: {
+        marginTop:90,
+        width: 180,
+        height: 91,
+    },
+    emailButton: {
+        marginTop: -20,
+        // aspectRatio: 175/50,
+        width: 180,
+        height: 91,
+    },
+    PasswordButton: {
+        marginTop: -20,
+        width: 180,
+        height: 91,
+    },
+    signupbutton: {
+        width: 150,
+        height: 60,
+        // 
+        marginTop: 20,
+
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    buttonImage: {
+        position: "absolute",
+        top: 0,
+        left: 0,
+        width: "100%",
+        height: "100%",
+        zIndex: 0,
     },
     text: {
-        fontSize: 30, fontFamily: 'PirataOne_400Regular'
+        fontSize: 30,
+        fontFamily: "PirataOne_400Regular",
+        color: "black",
+        zIndex: 1,
+        textAlign: "center",
+        // transform: [{ translateY: 100 }],
     },
-    image: {
-        color: 'white'
+    bigtrinketlogo: {
+        width: 280,
+        height: 150,
+        marginTop: 120
     }
 });
